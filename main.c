@@ -1,6 +1,31 @@
 #include "philosophers.h"
 
-t_philosopher	**init_philosophers(unsigned int num)
+
+int	err_msg(char *msg, int res)
+{
+	printf("%s", msg);
+	return (res);
+}
+
+
+/**
+ *
+ * @return -1 on error
+ */
+
+long long	get_time(void )
+{
+	struct timeval	t;
+	int				res;
+
+	res = gettimeofday(&t, NULL);
+	if (res != 0)
+		return (err_msg("gettimeofday error\n", -1));
+	return (t.tv_sec * 1000 + t.tv_usec / 1000);
+}
+
+
+t_philosopher	**init_philosophers(unsigned int num, pthread_mutex_t **forks)
 {
 	t_philosopher **phils;
 	unsigned int	i;
@@ -22,6 +47,7 @@ t_philosopher	**init_philosophers(unsigned int num)
 		phils[i]->id = i;
 		phils[i]->left_fork = i;
 		phils[i]->right_fork = (i + 1) % num;
+		phils[i]->forks = forks;
 		i++;
 	}
 	phils[i] = NULL;
@@ -44,11 +70,6 @@ int	init_table(unsigned int num, pthread_mutex_t **forks)
 	return (0);
 }
 
-int	err_msg(char *msg, int res)
-{
-	printf("%s", msg);
-	return (res);
-}
 
 int				is_number(char *str)
 {
@@ -92,61 +113,88 @@ int	init_struct(t_all *all, char *argv[])
 		return (-1);
 	if (init_table(all->num, &all->forks) == -1)
 		return (-1);
-	all->philosophers = init_philosophers(all->num);
+	all->philosophers = init_philosophers(all->num, &(all->forks));
 	if (all->philosophers == NULL)
 		return (-1);
 	return (0);
 }
 
-void	*it_s_my_life(void *str)
+void	*it_s_my_life(void *arg)
 {
-	while (1)
-		printf("%s\tit's my life\n", (char *)str);
+	long long		now;
+	t_philosopher	*philo;
+
+	philo = (t_philosopher *)arg;
+	printf("%d\ti was born\n", philo->id);
+//	while (1)
+		now = get_time();
+		philo->deadline = now + 3000;
+
+
+
 
 }
 
 void	*find_souls(void *arg)
 {
-//
+	t_all			*all;
+	t_philosopher	**p;
+	long long		now;
+
+	all = (t_all *)arg;
+	p = all->philosophers;
+	printf("adress: %d\n", all->num);
+	printf("epoch: %lld\n", all->start_point);
+	while(*p)
+	{
+		now = get_time();
+		printf("%d\n", (*p)->id);
+		p++;
+	}
 	return (NULL);
 }
 
-/**
- *
- * @return -1 on error
- */
-
-long long	get_time()
-{
-	struct timeval	t;
-	int				res;
-
-	res = gettimeofday(&t, NULL);
-	if (res != 0)
-		return (err_msg("gettimeofday error\n", -1));
-	return (t.tv_sec * 1000 + t.tv_usec / 1000);
-}
-
-int	create_philosophers(t_philosopher **arr, pthread_t *davy_jones)
+int	create_philosophers(t_philosopher **arr, pthread_t *davy_jones, t_all *all)
 {
 	int		res;
 
 	while (*arr)
 	{
-		res = pthread_create(&(*arr)->flow, NULL, it_s_my_life, "hi");
+		res = pthread_create(&(*arr)->flow, NULL, it_s_my_life, (void *)(*arr));
 		if (res != 0)
 			return 0;
 		arr++;
 	}
+	res = pthread_create(davy_jones, NULL, find_souls, all);
+	if (res != 0)
+		return 0;
+	return (1);
 }
 
+int	joint_threads(t_philosopher **arr, pthread_t *davy_jones)
+{
+	int	res;
 
+	while (*arr)
+	{
+		res = pthread_join((*arr)->flow, NULL);
+		if (res != 0)
+			return (0);
+		arr++;
+	}
+	res = pthread_join(*davy_jones, NULL);
+	if (res != 0)
+		return (0);
+	return (1);
+}
 
 
 void	philo_fight(t_all *all)
 {
 //	start lock
-	create_philosophers(all->philosophers, &all->davy_jones);
+	create_philosophers(all->philosophers, &all->davy_jones, all);
+	all->start_point = get_time();
+	joint_threads(all->philosophers, &all->davy_jones);
 //	setup_sun();
 //	wait_for_threads()
 

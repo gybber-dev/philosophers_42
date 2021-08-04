@@ -13,14 +13,14 @@
 //	return (0);
 //}
 
-int main()
-{
-	struct timeval t;
-	int res;
-	res = gettimeofday(&t, NULL);
-	printf("res %d\n", res);
-	printf("sec %ld\n", t.tv_sec);
-	printf("usec %d\n", t.tv_usec);
-	printf("msec %ld\n", (t.tv_sec * 1000 + t.tv_usec / 1000));
-
-}
+//int main()
+//{
+//	struct timeval t;
+//	int res;
+//	res = gettimeofday(&t, NULL);
+//	printf("res %d\n", res);
+//	printf("sec %ld\n", t.tv_sec);
+//	printf("usec %d\n", t.tv_usec);
+//	printf("msec %ld\n", (t.tv_sec * 1000 + t.tv_usec / 1000));
+//
+//}
