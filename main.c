@@ -183,8 +183,8 @@ int	print_msg(long long time, int philo, char *msg, t_all *all)
 		res = pthread_mutex_lock(&all->print);
 		if (res != 0)
 			return (err_msg("pthread_mutex_lock\n", 1));
-		printf("%lld", time);
-//		ft_putnbr_fd((int)time, 1);
+//		printf("%lld", time);
+		ft_putnbr_fd((int)time, 1);
 		ft_putstr_fd(" ", 1);
 		ft_putnbr_fd(philo + 1, 1);
 //		ft_putstr_fd(" dl: ", 1);
@@ -208,11 +208,10 @@ int	take_a_meal(t_philosopher *philo)
 	res = pthread_mutex_lock(&philo->all->forks[philo->right_fork]);
 	if (res != 0)
 		return (err_msg("pthread_mutex_lock\n", 0));
-	philo->deadline = get_time(philo->all->start_point) + philo->all->time_to_eat;
 	print_msg(get_time(philo->all->start_point), philo->id, " has taken a fork\n", philo->all);
 	print_msg(get_time(philo->all->start_point), philo->id, " is eating\n", philo->all);
-	m_sleep(philo->all->time_to_eat);
 	philo->deadline = (get_time(philo->all->start_point) + philo->all->time_to_die);
+	m_sleep(philo->all->time_to_eat);
 	res = pthread_mutex_unlock(&philo->all->forks[philo->left_fork]);
 	if (res != 0)
 		return (err_msg("pthread_mutex_unlock\n", 0));
