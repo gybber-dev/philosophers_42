@@ -22,5 +22,5 @@ add_executable(sandbox
 
 target_compile_options(
         philosophers PRIVATE
-        #        -Wall -Wextra -Werror
+                -Wall -Wextra -Werror
 )
