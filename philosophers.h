@@ -8,6 +8,7 @@
 # include <unistd.h>
 
 # define ABSOLUTE -1
+# define ERR -1
 # define RUNNING 1
 # define STOP 0
 
@@ -20,6 +21,7 @@ typedef struct s_philosopher
 	unsigned int	left_fork;
 	unsigned int	right_fork;
 	long long		deadline;
+	unsigned int	meals_passed;
 	pthread_t		flow;
 	struct s_all	*all;
 }			t_philosopher;

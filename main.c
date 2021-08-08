@@ -95,6 +95,7 @@ t_philosopher	**init_philosophers(unsigned int num, t_all *all)
 			free(phils);
 			return (NULL);
 		}
+		phils[i]->meals_passed = 0;
 		phils[i]->id = i;
 		phils[i]->deadline = (long long)all->time_to_die;
 		phils[i]->left_fork = i;
@@ -218,20 +219,17 @@ int	take_a_meal(t_philosopher *philo)
 	res = pthread_mutex_unlock(&philo->all->forks[philo->right_fork]);
 	if (res != 0)
 		return (err_msg("pthread_mutex_unlock\n", 0));
+	philo->meals_passed++;
 	return (1);
 }
 
 void	*it_s_my_life(void *arg)
 {
-//	long long		now;
 	t_philosopher	*philo;
 
 	philo = (t_philosopher *)arg;
-//	print_msg(philo->id, 1, "\tWAS BORN\n", &philo->all->print);
 	if (philo->id % 2)
 		usleep(100);
-//	now = get_time(philo->all->start_point);
-//	philo->deadline = now + (long long)philo->all->time_to_die;
 	while(philo->all->simulator_status != STOP)
 	{
 		if (!take_a_meal(philo))
@@ -245,34 +243,64 @@ void	*it_s_my_life(void *arg)
 	return (NULL);
 }
 
+void	count_meals(t_philosopher **p, int *status)
+{
+	unsigned int	min;
+	unsigned int	limit;
+
+	if (*p == NULL)
+	{
+		*status = STOP;
+		return ;
+	}
+	limit = (*p)->all->meals_number;
+	min = (*p)->meals_passed;
+	while (*p)
+	{
+		if ((*p)->meals_passed < min)
+			min = (*p)->meals_passed;
+		p++;
+	}
+	if (min < limit)
+		*status = RUNNING;
+	else
+		*status = STOP;
+}
+
 void	*find_souls(void *arg)
 {
 	t_all			*all;
+	int				i;
 	t_philosopher	**p;
 	long long		now;
 
 	all = (t_all *)arg;
-//	print_msg(0, -1, "\tDavy Jones: Where is my souls?\n", &all->print);
-//	ft_putstr_fd("Davy Jones: Where is my souls?\n", 1);
-
 	while(all->simulator_status != STOP)
 	{
 		p = all->philosophers;
-		while(*p)
+		count_meals(p, &all->simulator_status);
+		while(all->simulator_status == RUNNING && *p)
 		{
 			now = get_time(all->start_point);
 			if ((*p)->deadline < now)
 			{
 				printf("\n\n\n\n\n%d, Do you fear death? [now: %lld, dl: %lld]\n", (*p)->id + 1, now, (*p)->deadline);
 				print_msg(now, (*p)->id, " died\n", all);
-//
-//				pthread_mutex_lock(&all->print);
 				all->simulator_status = STOP;
-				break;
 			}
 			p++;
 		}
-
+		if (all->simulator_status == STOP)
+		{
+			pthread_mutex_lock(&all->print);
+			i = 0;
+			while (i < (int)all->num)
+			{
+				if (pthread_mutex_unlock(&all->forks[i]) != 0)
+					printf("pthread_mutex_unlock error");
+				i++;
+			}
+		}
 	}
 	return (NULL);
 }
@@ -285,13 +313,13 @@ int	create_philosophers(t_philosopher **arr, pthread_t *davy_jones, t_all *all)
 	{
 		res = pthread_create(&(*arr)->flow, NULL, it_s_my_life, (void *)(*arr));
 		if (res != 0)
-			return 0;
+			return (ERR);
 		arr++;
 	}
 	res = pthread_create(davy_jones, NULL, find_souls, all);
 	if (res != 0)
-		return 0;
-	return (1);
+		return (ERR);
+	return (EXIT_SUCCESS);
 }
 
 int	join_threads(t_philosopher **arr, pthread_t *davy_jones)
@@ -307,22 +335,47 @@ int	join_threads(t_philosopher **arr, pthread_t *davy_jones)
 	}
 	res = pthread_join(*davy_jones, NULL);
 	if (res != 0)
-		return (0);
-	return (1);
+		return (ERR);
+	return (EXIT_SUCCESS);
 }
 
+int	clear_all(t_all *all)
+{
+	int		i;
 
-void	philo_fight(t_all *all)
+	i = -1;
+	while (++i < (int)all->num)
+		if (pthread_mutex_destroy(&all->forks[i]) != 0)
+			return (err_msg("mutex destroy error\n", ERR));
+	free(all->forks);
+	i = -1;
+	while (++i < (int)all->num)
+		free(all->philosophers[i]);
+	free(all->philosophers);
+	return (EXIT_SUCCESS);
+}
+
+/**
+ *
+ * @param all
+ * @return 0 on success
+ */
+
+int	philo_fight(t_all *all)
 {
 	int res;
 
 	all->start_point = get_time(ABSOLUTE);
-	create_philosophers(all->philosophers, &all->davy_jones, all);
+	res = create_philosophers(all->philosophers, &all->davy_jones, all);
+	if (res == ERR)
+		return (ERR);
 	res = join_threads(all->philosophers, &all->davy_jones);
-	if (!res)
-		ft_putstr_fd("finished by ERROR", 1);
-	ft_putstr_fd("finished success", 1);
-	// clear mutexes
+	if (res == ERR)
+		return (ERR);
+	if (pthread_mutex_unlock(&all->print) != 0)
+		return (err_msg("pthread_mutex_unlock error", ERR));
+	clear_all(all);
+	return (EXIT_SUCCESS);
 }
 
 int main(int argc, char *argv[])
@@ -332,6 +385,7 @@ int main(int argc, char *argv[])
 		return (err_msg("Error number of arguments\n", 1));
 	if (init_struct(&all, argv) == -1)
 		return (err_msg("Error value of arguments\n", 1));
-	philo_fight(&all);
+	if (philo_fight(&all) == ERR)
+		return (err_msg("Simulation failed\n", 1));
 	return (0);
 }
