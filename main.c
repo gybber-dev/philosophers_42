@@ -47,9 +47,10 @@ char	*err_msg_p(char *msg, char *res)
 
 
 /**
- *
- * @return -1 on error
- */
+** returns absolute time in ms or relative time if start_point is
+** defined
+** @return -1 on error
+*/
 
 long long	get_time(long long start_point)
 {
@@ -71,21 +72,19 @@ void	m_sleep(unsigned int ms)
 
 	res = get_time(ABSOLUTE);
 	while(get_time(ABSOLUTE) < (ms + res))
-	{
 		usleep(300);
-	}
 }
 
 t_philosopher	**init_philosophers(unsigned int num, t_all *all)
 {
 	t_philosopher **phils;
-	unsigned int	i;
+	int	i;
 
 	phils = (t_philosopher **) malloc((num + 1) * sizeof(t_philosopher *));
 	if (!phils)
 		return (NULL);
-	i = 0;
-	while (i < num)
+	i = -1;
+	while (++i < (int)num)
 	{
 		phils[i] = (t_philosopher *) malloc(sizeof(t_philosopher));
 		if (!phils[i])
@@ -101,7 +100,6 @@ t_philosopher	**init_philosophers(unsigned int num, t_all *all)
 		phils[i]->left_fork = i;
 		phils[i]->right_fork = (i + 1) % num;
 		phils[i]->all = all;
-		i++;
 	}
 	phils[i] = NULL;
 	return (phils);
@@ -114,15 +112,25 @@ int	init_table(unsigned int num, pthread_mutex_t **forks, pthread_mutex_t *print
 
 	arr = (pthread_mutex_t*)malloc(num * sizeof (pthread_mutex_t));
 	if (!arr)
-		return (-1);
+		return (ERR);
 	i = -1;
 	while (++i < (int)num)
 		if (pthread_mutex_init(&arr[i], NULL) != 0)
-			return -1;  // TODO clear pthreads on error
+		{
+			while (--i >= 0)
+				pthread_mutex_destroy(&arr[i]);
+			free(arr);
+			return (ERR);
+		}
 	*forks = arr;
 	if (pthread_mutex_init(print, NULL) != 0)
-		return (-1);
-	return (0);
+	{
+		while (--i >= 0)
+			pthread_mutex_destroy(&arr[i]);
+		free(arr);
+		return (ERR);
+	}
+	return (EXIT_SUCCESS);
 }
 
 
@@ -145,17 +153,17 @@ int	check_args(char **argv)
 	while (*argv)
 	{
 		if (!is_number(*argv))
-			return (-1);
+			return (ERR);
 		argv++;
 	}
-	return (0);
+	return (EXIT_SUCCESS);
 }
 
 int	init_struct(t_all *all, char *argv[])
 {
 	memset(all, 0, sizeof(t_all));
-	if (check_args(argv) == -1)
-		return (-1);
+	if (check_args(argv) == ERR)
+		return (ERR);
 	all->simulator_status = RUNNING;
 	all->meals_number = -2;
 	all->num = ft_atoi(argv[1]);
@@ -165,17 +173,17 @@ int	init_struct(t_all *all, char *argv[])
 	if (argv[5] != NULL)
 		all->meals_number = ft_atoi(argv[5]);
 	if (all->time_to_eat < 0 || all->num < 0 || all->time_to_die < 0 || \
-			all->time_to_sleep < 0 || (int)all->meals_number == -1)
-		return (-1);
-	if (init_table(all->num, &all->forks, &all->print) == -1)
-		return (-1);
+			all->time_to_sleep < 0 || (int)all->meals_number == ERR)
+		return (ERR);
+	if (init_table(all->num, &all->forks, &all->print) == ERR)
+		return (ERR);
 	all->philosophers = init_philosophers(all->num, all);
 	if (all->philosophers == NULL)
-		return (-1);
-	return (0);
+		return (ERR);
+	return (EXIT_SUCCESS);
 }
 
-int	print_msg(long long time, int philo, char *msg, t_all *all)
+int	print_msg(long long time, unsigned int philo, char *msg, t_all *all)
 {
 	int res;
 
@@ -183,17 +191,14 @@ int	print_msg(long long time, int philo, char *msg, t_all *all)
 	{
 		res = pthread_mutex_lock(&all->print);
 		if (res != 0)
-			return (err_msg("pthread_mutex_lock\n", 1));
-//		printf("%lld", time);
+			return (err_msg("pthread_mutex_lock error\n", 1));
 		ft_putnbr_fd((int)time, 1);
 		ft_putstr_fd(" ", 1);
 		ft_putnbr_fd(philo + 1, 1);
-//		ft_putstr_fd(" dl: ", 1);
-//		ft_putnbr_fd(all->philosophers[philo]->deadline, 1);
 		ft_putstr_fd(msg, 1);
 		res = pthread_mutex_unlock(&all->print);
 		if (res != 0)
-			return (err_msg("pthread_mutex_unlock\n", 1));
+			return (err_msg("pthread_mutex_unlock error\n", 1));
 	}
 	return (0);
 }
@@ -204,23 +209,23 @@ int	take_a_meal(t_philosopher *philo)
 
 	res = pthread_mutex_lock(&philo->all->forks[philo->left_fork]);
 	if (res != 0)
-		return (err_msg("pthread_mutex_lock\n", 0));
+		return (err_msg("pthread_mutex_lock\n", ERR));
 	print_msg(get_time(philo->all->start_point), philo->id, " has taken a fork\n", philo->all);
 	res = pthread_mutex_lock(&philo->all->forks[philo->right_fork]);
 	if (res != 0)
-		return (err_msg("pthread_mutex_lock\n", 0));
+		return (err_msg("pthread_mutex_lock\n", ERR));
 	print_msg(get_time(philo->all->start_point), philo->id, " has taken a fork\n", philo->all);
 	print_msg(get_time(philo->all->start_point), philo->id, " is eating\n", philo->all);
 	philo->deadline = (get_time(philo->all->start_point) + philo->all->time_to_die);
 	m_sleep(philo->all->time_to_eat);
 	res = pthread_mutex_unlock(&philo->all->forks[philo->left_fork]);
 	if (res != 0)
-		return (err_msg("pthread_mutex_unlock\n", 0));
+		return (err_msg("pthread_mutex_unlock\n", ERR));
 	res = pthread_mutex_unlock(&philo->all->forks[philo->right_fork]);
 	if (res != 0)
-		return (err_msg("pthread_mutex_unlock\n", 0));
+		return (err_msg("pthread_mutex_unlock\n", ERR));
 	philo->meals_passed++;
-	return (1);
+	return (EXIT_SUCCESS);
 }
 
 void	*it_s_my_life(void *arg)
@@ -232,14 +237,12 @@ void	*it_s_my_life(void *arg)
 		usleep(100);
 	while(philo->all->simulator_status != STOP)
 	{
-		if (!take_a_meal(philo))
+		if (take_a_meal(philo) == ERR)
 			return (err_msg_p("pthread_mutex_lock\n", NULL));
 		print_msg(get_time(philo->all->start_point), philo->id, " is sleeping\n", philo->all);
 		m_sleep(philo->all->time_to_sleep);
 		print_msg(get_time(philo->all->start_point), philo->id, " is thinking\n", philo->all);
 	}
-	ft_putnbr_fd(philo->id, 1);
-	ft_putstr_fd(" was exit\n", 1);
 	return (NULL);
 }
 
@@ -267,39 +270,41 @@ void	count_meals(t_philosopher **p, int *status)
 		*status = STOP;
 }
 
+void	check_deadlines(t_philosopher **p, t_all *all)
+{
+	long long		now;
+
+	while(all->simulator_status == RUNNING && *p)
+	{
+		now = get_time(all->start_point);
+		if ((*p)->deadline < now)
+		{
+			print_msg(now, (*p)->id, " died\n", all);
+			all->simulator_status = STOP;
+		}
+		p++;
+	}
+}
+
 void	*find_souls(void *arg)
 {
 	t_all			*all;
 	int				i;
 	t_philosopher	**p;
-	long long		now;
 
 	all = (t_all *)arg;
 	while(all->simulator_status != STOP)
 	{
 		p = all->philosophers;
 		count_meals(p, &all->simulator_status);
-		while(all->simulator_status == RUNNING && *p)
-		{
-			now = get_time(all->start_point);
-			if ((*p)->deadline < now)
-			{
-				printf("\n\n\n\n\n%d, Do you fear death? [now: %lld, dl: %lld]\n", (*p)->id + 1, now, (*p)->deadline);
-				print_msg(now, (*p)->id, " died\n", all);
-				all->simulator_status = STOP;
-			}
-			p++;
-		}
+		check_deadlines(p, all);
 		if (all->simulator_status == STOP)
 		{
 			pthread_mutex_lock(&all->print);
-			i = 0;
-			while (i < (int)all->num)
-			{
+			i = -1;
+			while (++i < (int)all->num)
 				if (pthread_mutex_unlock(&all->forks[i]) != 0)
-					printf("pthread_mutex_unlock error");
-				i++;
-			}
+					err_msg_p("pthread_mutex_unlock error\n", NULL);
 		}
 	}
 	return (NULL);
@@ -330,7 +335,7 @@ int	join_threads(t_philosopher **arr, pthread_t *davy_jones)
 	{
 		res = pthread_join((*arr)->flow, NULL);
 		if (res != 0)
-			return (0);
+			return (ERR);
 		arr++;
 	}
 	res = pthread_join(*davy_jones, NULL);
@@ -380,10 +385,11 @@ int	philo_fight(t_all *all)
 
 int main(int argc, char *argv[])
 {
-	t_all all;
+	t_all	all;
+
 	if (argc < 5 || argc > 6)
 		return (err_msg("Error number of arguments\n", 1));
-	if (init_struct(&all, argv) == -1)
+	if (init_struct(&all, argv) == ERR)
 		return (err_msg("Error value of arguments\n", 1));
 	if (philo_fight(&all) == ERR)
 		return (err_msg("Simulation failed\n", 1));
